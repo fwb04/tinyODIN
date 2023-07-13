@@ -39,15 +39,17 @@ module spi_slave #(
     input  wire                 MOSI,
 
     // Control interface for readback -------------------------
-    output reg                  CTRL_READBACK_EVENT,
     output reg                  CTRL_PROG_EVENT,
     output reg  [      2*M-1:0] CTRL_SPI_ADDR,
     output reg  [          1:0] CTRL_OP_CODE,
-    output reg  [      2*M-1:0] CTRL_PROG_DATA,
+
+    output reg                  CTRL_READBACK_EVENT,
+    output reg  [      2*M-1:0] CTRL_PROG_DATA, 
+
     input  wire [         31:0] SYNARRAY_RDATA,
     input  wire [         31:0] NEUR_STATE,
 
-    // Configuration registers output -------------------------
+    // *Configuration registers output -------------------------
     output reg                  SPI_GATE_ACTIVITY,
     output reg                  SPI_OPEN_LOOP,
     output reg                  SPI_AER_SRC_CTRL_nNEUR,
@@ -118,12 +120,12 @@ module spi_slave #(
             CTRL_SPI_ADDR       <= CTRL_SPI_ADDR;
             CTRL_OP_CODE        <= CTRL_OP_CODE;
             CTRL_PROG_DATA      <= {(2*M){1'b0}};
-		end else if (spi_addr[18] && (spi_cnt == 6'd39)) begin
+		end else if (spi_addr[18] && (spi_cnt == 6'd39)) begin // write to neuron or synapse memory
             spi_shift_reg_out   <= {spi_shift_reg_out[18:0], 1'b0};
             CTRL_READBACK_EVENT <= 1'b0;
-            CTRL_PROG_EVENT     <= (CTRL_OP_CODE != 2'b0);
-            CTRL_SPI_ADDR       <= CTRL_SPI_ADDR;
-            CTRL_OP_CODE        <= CTRL_OP_CODE;
+            CTRL_PROG_EVENT     <= (CTRL_OP_CODE != 2'b0); // write to neuron or synapse memory
+            CTRL_SPI_ADDR       <= CTRL_SPI_ADDR; // 16-bit
+            CTRL_OP_CODE        <= CTRL_OP_CODE; // 01: write to neuron memory, 10: write to synapse memory
             CTRL_PROG_DATA      <= spi_shift_reg_in[2*M-1:0];
 		end else begin
             spi_shift_reg_out   <= {spi_shift_reg_out[18:0], 1'b0};
@@ -133,7 +135,7 @@ module spi_slave #(
             CTRL_OP_CODE        <= CTRL_OP_CODE;
             CTRL_PROG_DATA      <= CTRL_PROG_DATA;
         end
-         
+        
     assign readback_weight = SYNARRAY_RDATA >> (({3'b0,CTRL_SPI_ADDR[2*M-2:2*M-3]} << 3));
     assign readback_neuron =     NEUR_STATE >> (({3'b0,CTRL_SPI_ADDR[2*M-1:  M  ]} << 3));
     
@@ -142,24 +144,43 @@ module spi_slave #(
 
     
 	//----------------------------------------------------------------------------------
-	//	Output config. registers
+	//*	Output config. registers
 	//----------------------------------------------------------------------------------
   
     //SPI_GATE_ACTIVITY - 1 bit - address 0
-    always @(posedge SCK)
-        if      (!spi_addr[17] && !spi_addr[16] && (spi_addr[15:0] == 16'd0 ) && (spi_cnt == 6'd39))  SPI_GATE_ACTIVITY <= MOSI;
+    // Gates the network activity and allows the SPI to access the neuron and synapse memories for programming and readback.
+    always @(posedge SCK) begin
+        if (!spi_addr[17] && !spi_addr[16] && (spi_addr[15:0] == 16'd1) && (spi_cnt == 6'd39)) begin
+            SPI_GATE_ACTIVITY <= MOSI;  // MOSI=d[0]?
+        end
+    end
         
     //SPI_OPEN_LOOP - 1 bit - address 1
+    //Prevents spike events generated locally by the neuron array from entering the scheduler, 
+    //they will thus not be processed by the controller and the scheduler only handles events 
+    //received from the input AER interface. Locally-generated spike events can still be transmitted 
+    //via the output AER interface if the "SPI_AER_SRC_CTRL_nNEUR" configuration register is de-asserted.
     always @(posedge SCK)
-        if      (!spi_addr[17] && !spi_addr[16] && (spi_addr[15:0] == 16'd1 ) && (spi_cnt == 6'd39))  SPI_OPEN_LOOP <= MOSI;
+        if (!spi_addr[17] && !spi_addr[16] && (spi_addr[15:0] == 16'd1) && (spi_cnt == 6'd39))  
+            SPI_OPEN_LOOP <= MOSI; // MOSI=d[0]?
 
     //SPI_AER_SRC_CTRL_nNEUR - 1 bit - address 2
+    // Defines the source of the AER output events when a neuron spikes, either directly from 
+    // the neuron when the event is generated (0) or from the controller when the event is processed (1). 
+    // This distinction is of importance especially if "SPI_OPEN_LOOP" is asserted.
     always @(posedge SCK)
-        if      (!spi_addr[17] && !spi_addr[16] && (spi_addr[15:0] == 16'd2 ) && (spi_cnt == 6'd39))  SPI_AER_SRC_CTRL_nNEUR <= MOSI;
+        if (!spi_addr[17] && !spi_addr[16] && (spi_addr[15:0] == 16'd2 ) && (spi_cnt == 6'd39))  
+            SPI_AER_SRC_CTRL_nNEUR <= MOSI;
 
     //SPI_MAX_NEUR - M bits - address 3
-    always @(posedge SCK)
-        if      (!spi_addr[17] && !spi_addr[16] && (spi_addr[15:0] == 16'd3 ) && (spi_cnt == 6'd39))  SPI_MAX_NEUR <= {spi_shift_reg_in[M-2:0], MOSI};
+    // Defines the maximum neuron index to be processed, i.e. the crossbar array size. 
+    // This parameter is useful to avoid processing dummy synaptic operations in case 
+    // the neuron resources actually being used are small.
+    always @(posedge SCK) begin
+        if (!spi_addr[17] && !spi_addr[16] && (spi_addr[15:0] == 16'd3 ) && (spi_cnt == 6'd39)) begin
+            SPI_MAX_NEUR <= {spi_shift_reg_in[M-2:0], MOSI};
+        end
+    end
 
     /*                                                 *
      * Some address room for other params if necessary *

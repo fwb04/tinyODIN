@@ -1,13 +1,13 @@
-// Copyright (C) 2019-2022, Université catholique de Louvain (UCLouvain, Belgium), University of Zürich (UZH, Switzerland),
+// Copyright (C) 2019-2022, Universitï¿½ catholique de Louvain (UCLouvain, Belgium), University of Zï¿½rich (UZH, Switzerland),
 //         Katholieke Universiteit Leuven (KU Leuven, Belgium), and Delft University of Technology (TU Delft, Netherlands).
 // SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
 //
-// Licensed under the Solderpad Hardware License v 2.1 (the “License”); you may not use this file except in compliance
+// Licensed under the Solderpad Hardware License v 2.1 (the ï¿½Licenseï¿½); you may not use this file except in compliance
 // with the License, or, at your option, the Apache License version 2.0. You may obtain a copy of the License at
 // https://solderpad.org/licenses/SHL-2.1/
 //
 // Unless required by applicable law or agreed to in writing, any work distributed under the License is distributed on
-// an “AS IS” BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+// an ï¿½AS ISï¿½ BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 // specific language governing permissions and limitations under the License.
 //
 //------------------------------------------------------------------------------
@@ -18,7 +18,7 @@
 //
 // Author:  C. Frenkel, Delft University of Technology
 //
-// Cite/paper: C. Frenkel, M. Lefebvre, J.-D. Legat and D. Bol, "A 0.086-mm² 12.7-pJ/SOP 64k-Synapse 256-Neuron Online-Learning
+// Cite/paper: C. Frenkel, M. Lefebvre, J.-D. Legat and D. Bol, "A 0.086-mmï¿½ 12.7-pJ/SOP 64k-Synapse 256-Neuron Online-Learning
 //             Digital Spiking Neuromorphic Processor in 28-nm CMOS," IEEE Transactions on Biomedical Circuits and Systems,
 //             vol. 13, no. 1, pp. 145-158, 2019.
 //
@@ -64,6 +64,7 @@ module tinyODIN #(
     wire                 AEROUT_CTRL_BUSY;
     
     // SPI + parameter bank
+    // Global configuration registers (written by SPI, no readback, don't have a default reset value)
     wire                 SPI_GATE_ACTIVITY, SPI_GATE_ACTIVITY_sync;
     wire                 SPI_OPEN_LOOP;
     wire                 SPI_AER_SRC_CTRL_nNEUR;
@@ -105,12 +106,12 @@ module tinyODIN #(
     //----------------------------------------------------------------------------------
 	//	Reset (with double sync barrier)
 	//----------------------------------------------------------------------------------
-    
+    // 
     always @(posedge CLK) begin
         RST_sync_int <= RST;
 		RST_sync     <= RST_sync_int;
 	end
-    
+    // sync neg reset
     assign RSTN_sync = ~RST_sync;
 
 

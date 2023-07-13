@@ -35,21 +35,21 @@ module aer_out #(
     input  wire           RST,
     
     // Inputs from SPI configuration latches ----------
-    input  wire           SPI_GATE_ACTIVITY_sync,
-    input  wire           SPI_AER_SRC_CTRL_nNEUR,
+    input  wire           SPI_GATE_ACTIVITY_sync, // from controller, to neuorn and aer_out
+    input  wire           SPI_AER_SRC_CTRL_nNEUR, // from spi_slave, to aer_out
     
     // Neuron data inputs -----------------------------
     input  wire           NEUR_EVENT_OUT,
     input  wire [  M-1:0] CTRL_NEURMEM_ADDR,
     
     // Input from scheduler ---------------------------
-    input  wire [   11:0] SCHED_DATA_OUT,
+    input  wire [   11:0] SCHED_DATA_OUT, // from scheduler, to aer_out, controller
   
     // Input from controller --------------------------
-    input  wire           CTRL_AEROUT_POP_NEUR,
+    input  wire           CTRL_AEROUT_POP_NEUR, // from controller, to aer_out
     
     // Output to controller ---------------------------
-    output reg            AEROUT_CTRL_BUSY,
+    output reg            AEROUT_CTRL_BUSY, 
     
 	// Output 8-bit AER link --------------------------
 	output reg  [  M-1:0] AEROUT_ADDR, 
@@ -63,7 +63,7 @@ module aer_out #(
    wire           rst_activity;
    
    
-   assign rst_activity = RST || SPI_GATE_ACTIVITY_sync;
+   assign rst_activity = RST || SPI_GATE_ACTIVITY_sync; // rise edge reset
    
    // Sync barrier
    always @(posedge CLK, posedge rst_activity) begin
@@ -78,6 +78,7 @@ module aer_out #(
 			AEROUT_ACK_sync_del <= AEROUT_ACK_sync;
 		end
 	end
+     // ACK_sync fall edge, 1 cycle 
     assign AEROUT_ACK_sync_negedge = ~AEROUT_ACK_sync & AEROUT_ACK_sync_del;
     
     

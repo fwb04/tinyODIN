@@ -25,6 +25,8 @@
 //------------------------------------------------------------------------------
 
 
+// sync fifo
+//? full still write?
 module fifo #(
 	parameter width      = 9,
     parameter depth      = 4,
@@ -32,8 +34,8 @@ module fifo #(
 )(
     input  wire              clk,
     input  wire              rst_n,
-    input  wire              push_req_n,
-    input  wire              pop_req_n,
+    input  wire              push_req_n, // low enable
+    input  wire              pop_req_n, // low enable
     input  wire [width-1: 0] data_in,
     output reg               empty,
     output wire              full,
@@ -48,8 +50,7 @@ module fifo #(
 
     genvar i;
 
-
-
+    // write pointer
     always @(posedge clk, negedge rst_n) begin
         if (!rst_n)
             write_ptr <= 2'b0;
@@ -59,6 +60,7 @@ module fifo #(
             write_ptr <= write_ptr;
     end
 
+    // read pointer
     always @(posedge clk, negedge rst_n) begin
         if (!rst_n)
             read_ptr <= 2'b0;
@@ -68,44 +70,42 @@ module fifo #(
             read_ptr <= read_ptr;
     end
 
+    // data counter
     always @(posedge clk, negedge rst_n) begin
         if (!rst_n)
             fill_cnt <= 2'b0;
-        else if (!push_req_n && pop_req_n && !empty)
+        else if (!push_req_n && pop_req_n && !empty) // push and not pop and not empty
             fill_cnt <= fill_cnt + {{(depth_addr-1){1'b0}},1'b1};
-        else if (!push_req_n && !pop_req_n)
+        else if (!push_req_n && !pop_req_n) // push and pop
             fill_cnt <= fill_cnt;
-        else if (!pop_req_n && |fill_cnt)
+        else if (!pop_req_n && |fill_cnt) // pop and not empty
             fill_cnt <= fill_cnt - {{(depth_addr-1){1'b0}},1'b1};
         else
             fill_cnt <= fill_cnt;
     end
 
+    // empty test
     always @(posedge clk, negedge rst_n) begin
         if (!rst_n)
             empty <= 1'b1;
         else if (!push_req_n)
-            empty <= 1'b0;
+            empty <= 1'b0; // not empty
         else if (!pop_req_n)
-            empty <= ~|fill_cnt; 
+            empty <= ~|fill_cnt; // not empty
     end
-
+    // full test
     assign full  =  &fill_cnt;
 
-
+    //? why generate? mem[write_ptr] <= data_in;
     generate
-
         for (i=0; i<depth; i=i+1) begin
-            
             always @(posedge clk) begin
                 if (!push_req_n && (write_ptr == i))
                     mem[i] <= data_in;
                 else 
                     mem[i] <= mem[i];
             end
-            
         end
-        
     endgenerate
 
     assign data_out = mem[read_ptr];

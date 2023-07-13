@@ -47,7 +47,7 @@ module scheduler #(
     // Inputs from SPI configuration registers ----------------
     input  wire                 SPI_OPEN_LOOP,
     
-    // Outputs ------------------------------------------------
+    // Outputs to controller    --------------------------------
     output wire                 SCHED_EMPTY,
     output wire                 SCHED_FULL,
     output wire [         11:0] SCHED_DATA_OUT
@@ -85,7 +85,7 @@ module scheduler #(
     ) fifo_spike_0 (
         .clk(CLK),
         .rst_n(RSTN),
-        .push_req_n(full_main | push_req_n),
+        .push_req_n(full_main | push_req_n), 
         .pop_req_n(empty_main | CTRL_SCHED_POP_N),
         .data_in(CTRL_SCHED_EVENT_IN ? {CTRL_SCHED_VIRTS,CTRL_SCHED_ADDR} : {4'b0,CTRL_NEURMEM_ADDR}),
         .empty(empty_main),
@@ -93,6 +93,8 @@ module scheduler #(
         .data_out(data_out_main)
     );
 
+    // SPI_OPEN_LOOP_sync = 0 and NEUR_EVENT_OUT = 1 ->
+    // or CTRL_SCHED_EVENT_IN = 1                    ->  push (4b synapse + 8b neuron addr) event into FIFO
     assign push_req_n = ~((~SPI_OPEN_LOOP_sync & NEUR_EVENT_OUT) | CTRL_SCHED_EVENT_IN);
 
 

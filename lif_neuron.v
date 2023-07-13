@@ -30,6 +30,7 @@ module lif_neuron (
     input  wire [          6:0] param_leak_str,          // leakage strength parameter
     input  wire [         11:0] param_thr,               // neuron firing threshold parameter 
     
+    // signed membrane potential
     input  wire [         11:0] state_core,              // core neuron state from SRAM 
     output wire [         11:0] state_core_next,         // next core neuron state to SRAM
     

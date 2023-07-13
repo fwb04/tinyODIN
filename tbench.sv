@@ -55,10 +55,29 @@ module tbench (
     logic            SNN_initialized_rdy;
     
     logic            SCK, MOSI, MISO;
+
+    // copy of some signals
+    logic MISO_c;
+    // always @(negedge SCK) begin
+    //     wait_ns(12.5);
+    //     MISO_c <= MISO;
+    // end
+
+    logic [  `M-1:0] AEROUT_ADDR_c;
+    logic AERIN_ACK_c;
+    logic AEROUT_REQ_c;
+    
     logic [  `M+1:0] AERIN_ADDR;
     logic [  `M-1:0] AEROUT_ADDR;
     logic            AERIN_REQ, AERIN_ACK, AEROUT_REQ, AEROUT_ACK;
     wire             SCHED_FULL;
+
+    always @(*) begin
+        MISO_c = MISO;
+        AERIN_ACK_c = AERIN_ACK;
+        AEROUT_REQ_c = AEROUT_REQ;
+        AEROUT_ADDR_c = AEROUT_ADDR;
+    end
     
     logic [    31:0] synapse_pattern , syn_data;
     logic [    31:0] neuron_pattern  , neur_data;
@@ -121,6 +140,7 @@ module tbench (
 	***************************/
 	
 	initial begin 
+        
         wait_ns(0.1);
         RST = 1'b0;
         wait_ns(100);
@@ -144,6 +164,10 @@ module tbench (
 	***************************/
 
 	initial begin 
+        $fsdbDumpfile("tb_.fsdb");
+        $fsdbDumpvars;
+        $fsdbDumpMDA();
+
         while (~SPI_config_rdy) wait_ns(1);
         
         /*****************************************************************************************************************************************************************************************************************
@@ -175,7 +199,7 @@ module tbench (
 
         
         /*****************************************************************************************************************************************************************************************************************
-                                                                                                    PROGRAM NEURON MEMORY WITH TEST VALUES
+                                                                                                1. PROGRAM NEURON MEMORY WITH TEST VALUES
         *****************************************************************************************************************************************************************************************************************/
 
         if (`PROGRAM_NEURON_MEMORY) begin
@@ -183,10 +207,14 @@ module tbench (
             neuron_pattern = {2{8'b01010101,8'b10101010}};
             for (i=0; i<`N; i=i+1) begin
                 for (j=0; j<4; j=j+1) begin
+                    // j: byte_addr
+                    // i: word_addr (neuron_addr)
                     neur_data       = neuron_pattern >> (j<<3);
-                    addr_temp[15:8] = j;
-                    addr_temp[7:0]  = i;    // Each single neuron
-                    spi_send (.addr({1'b0,1'b1,2'b01,addr_temp[15:0]}), .data({4'b0,8'h00,neur_data[7:0]}), .MISO(MISO), .MOSI(MOSI), .SCK(SCK));
+                    addr_temp[15:8] = j; 
+                    addr_temp[7:0]  = i;    // Each single neuron 
+                    // 0101, (000000, byte_addr[1:0]), word_addr[7:0] 
+                    // wirte a byte every time 
+                    spi_send (.addr({1'b0,1'b1,2'b01,addr_temp[15:0]}), .data({4'b0,8'h00,neur_data[7:0]}), .MISO(MISO), .MOSI(MOSI), .SCK(SCK)); 
                 end
                 if(!(i%10))
                     $display("programming neurons... (i=%0d/256)", i);
@@ -197,9 +225,8 @@ module tbench (
             
         
         /*****************************************************************************************************************************************************************************************************************
-                                                                                                        READ BACK AND TEST NEURON MEMORY
+                                                                                                2. READ BACK AND TEST NEURON MEMORY
         *****************************************************************************************************************************************************************************************************************/
-        
         if (`VERIFY_NEURON_MEMORY) begin
             $display("----- Starting verification of neuron memory in the SNN through SPI.");
             for (i=0; i<`N; i=i+1) begin
@@ -207,7 +234,7 @@ module tbench (
                     neur_data       = neuron_pattern >> (j<<3);
                     addr_temp[15:8] = j;
                     addr_temp[7:0]  = i;    // Each single neuron
-                    spi_read (.addr({1'b1,1'b0,2'b01,addr_temp[15:0]}), .data(spi_read_data), .MISO(MISO), .MOSI(MOSI), .SCK(SCK)); 
+                    spi_read (.addr({1'b1,1'b0,2'b01,addr_temp[15:0]}), .data(spi_read_data), .MISO(MISO_c), .MOSI(MOSI), .SCK(SCK)); 
                     assert(spi_read_data == {12'b0,neur_data[7:0]}) else $fatal(0, "Byte %d of neuron %d not written/read correctly.", j, i);
                 end
                 if(!(i%10))
@@ -219,7 +246,7 @@ module tbench (
         
         
         /*****************************************************************************************************************************************************************************************************************
-                                                                                                    PROGRAM SYNAPSE MEMORY WITH TEST VALUES
+                                                                                            3. PROGRAM SYNAPSE MEMORY WITH TEST VALUES
         *****************************************************************************************************************************************************************************************************************/
         
         if (`PROGRAM_ALL_SYNAPSES) begin
@@ -241,7 +268,7 @@ module tbench (
             
         
         /*****************************************************************************************************************************************************************************************************************
-                                                                                                        READ BACK AND TEST SYNAPSE MEMORY
+                                                                                                    4.  READ BACK AND TEST SYNAPSE MEMORY
         *****************************************************************************************************************************************************************************************************************/
         
         if (`VERIFY_ALL_SYNAPSES) begin
@@ -251,7 +278,7 @@ module tbench (
                     syn_data        = synapse_pattern >> (j<<3);
                     addr_temp[15:13] = j;    // Each single byte in a 32-bit word
                     addr_temp[12:0 ] = i;    // Programmed address by address
-                    spi_read (.addr({1'b1,1'b0,2'b10,addr_temp[15:0]}), .data(spi_read_data), .MISO(MISO), .MOSI(MOSI), .SCK(SCK)); 
+                    spi_read (.addr({1'b1,1'b0,2'b10,addr_temp[15:0]}), .data(spi_read_data), .MISO(MISO_c), .MOSI(MOSI), .SCK(SCK)); 
                     assert(spi_read_data == {12'b0,syn_data[7:0]}) else $fatal(0, "Byte %d of address %d not written/read correctly.", j, i);
                 end
                 if(!(i%500))
@@ -265,11 +292,13 @@ module tbench (
         /*****************************************************************************************************************************************************************************************************************
                                                                                                      SYSTEM-LEVEL CHECKING
         *****************************************************************************************************************************************************************************************************************/
-           
+        // AEROUT_ADDR_c = AEROUT_ADDR;
+        // AEROUT_REQ_c = AEROUT_REQ;
         if (`DO_FULL_CHECK) begin
         
             fork
-                auto_ack(.req(AEROUT_REQ), .ack(AEROUT_ACK), .addr(AEROUT_ADDR), .neur(aer_neur_spk), .verbose(auto_ack_verbose));
+                // Output AER bus 
+                auto_ack(.req(AEROUT_REQ_c), .ack(AEROUT_ACK), .addr(AEROUT_ADDR_c), .neur(aer_neur_spk), .verbose(auto_ack_verbose));
             join_none
         
             // Initializing all neurons to zero
@@ -283,7 +312,6 @@ module tbench (
         
 
             for (phase=0; phase<2; phase=phase+1) begin
-
 
 	            $display("--- Starting phase %d.", phase);
 
@@ -384,8 +412,9 @@ module tbench (
 	                    default : $fatal("Error in neuron configuration"); 
 	                endcase 
 	                
+                    // 32-bit
 	                neuron_pattern = {1'b0, param_leak_str, param_thr, mem_init};
-	                                         
+	                // write a byte one 'for' cycle                         
 	                for (j=0; j<4; j=j+1) begin
 	                    neur_data       = neuron_pattern >> shift_amt;
 	                    addr_temp[15:8] = j;
@@ -393,7 +422,7 @@ module tbench (
 	                    spi_send (.addr({1'b0,1'b1,2'b01,addr_temp[15:0]}), .data({4'b0,8'h00,neur_data[7:0]}), .MISO(MISO), .MOSI(MOSI), .SCK(SCK));
 	                    shift_amt       = shift_amt + 32'd8;
 	                end          
-
+                    // ???
 			        for (j=0; j<16; j=j+1) begin
 			            addr_temp[ 12:5] = input_neurons[j][7:0];
 			            addr_temp[  4:0] = target_neurons[i][7:3];
@@ -401,9 +430,10 @@ module tbench (
 			            spi_send (.addr({1'b0,1'b1,2'b10,addr_temp[15:0]}), .data({4'b0,8'h00,{input_neurons[j][3:0],input_neurons[j][3:0]}}), .MISO(MISO), .MOSI(MOSI), .SCK(SCK));    // Synapse value = pre-synaptic neuron index 4 LSBs
 			        end
 
-                end
+                end 
+                // programming neurons END
 
-
+                //AERIN_ACK_c = AERIN_ACK;
                 if (`DO_OPEN_LOOP) begin
 
     	            //Re-enable network operation (SPI_OPEN_LOOP stays at 1)
@@ -417,7 +447,7 @@ module tbench (
                     if (!phase) begin
 
                     	for (j=0; j<2050; j=j+1) begin
-                    		aer_send (.addr_in({1'b0,1'b1,8'hFF}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Time reference event (global)
+                    		aer_send (.addr_in({1'b0,1'b1,8'hFF}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Time reference event (global)
                             wait_ns(2000);
 
                             for (n=0; n<256; n++)
@@ -437,7 +467,7 @@ module tbench (
 
                     	for (j=0; j<16; j=j+1)
     	                	for (k=0; k<10; k=k+1) begin
-    	                		aer_send (.addr_in({1'b0,1'b0,input_neurons[j][7:0]}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Neuron events
+    	                		aer_send (.addr_in({1'b0,1'b0,input_neurons[j][7:0]}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Neuron events
                                 wait_ns(2000);
                     
                                 for (n=0; n<256; n++)
@@ -455,7 +485,7 @@ module tbench (
 
 
                         for (j=0; j<100; j=j+1) begin
-                            aer_send (.addr_in({1'b0,1'b1,8'hFF}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Time reference event (global)
+                            aer_send (.addr_in({1'b0,1'b1,8'hFF}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Time reference event (global)
                             wait_ns(2000);
 
                             for (n=0; n<256; n++)
@@ -473,7 +503,7 @@ module tbench (
                         fork
                             // Thread 1
                         	for (k=0; k<300; k=k+1) begin
-                        		aer_send (.addr_in({1'b0,1'b0,input_neurons[7][7:0]}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Neuron events
+                        		aer_send (.addr_in({1'b0,1'b0,input_neurons[7][7:0]}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Neuron events
                                 wait_ns(2000);
 
                                 for (n=0; n<256; n++)
@@ -495,7 +525,7 @@ module tbench (
                     end   
 
                 end 
-
+                // OPEN_LOOP check END
 
                 if (`DO_CLOSED_LOOP) begin
 
@@ -511,8 +541,8 @@ module tbench (
                         //Start monitoring output spikes in the console
                         auto_ack_verbose = 1'b1;
 
-                        aer_send (.addr_in({1'b1,1'b0,{4'h5,4'd3}}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Virtual value-5 event to neuron 3
-                        aer_send (.addr_in({1'b1,1'b0,{4'h5,4'd3}}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK), .req(AERIN_REQ)); //Virtual value-5 event to neuron 3
+                        aer_send (.addr_in({1'b1,1'b0,{4'h5,4'd3}}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Virtual value-5 event to neuron 3
+                        aer_send (.addr_in({1'b1,1'b0,{4'h5,4'd3}}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Virtual value-5 event to neuron 3
                         /*
                          * Here, the correct output firing sequence is 3,0,1,0.
                          */
@@ -537,21 +567,19 @@ module tbench (
                     end
 
                 end
-
+                // CLOSED_LOOP check END
             end
 
             $display("----- No error found -- All tests passed! :-)"); 
 
         end else
             $display("----- Skipping scheduler checking."); 
- 
- 
-
+        // Full_check END
  
         wait_ns(500);
         $finish;
-        
     end
+    // initial end
     
     
     /***************************
@@ -566,7 +594,7 @@ module tbench (
         // SPI slave        -------------------------------
         .SCK(SCK),
         .MOSI(MOSI),
-        .MISO(MISO),
+        .MISO(MISO), // output
         
         // Input 10-bit AER -------------------------------
         .AERIN_ADDR(AERIN_ADDR),
@@ -690,6 +718,8 @@ module tbench (
         ref    logic        SCK
     );
         integer i;
+        
+        // MISO_c = MISO;
         
         for (i=0; i<20; i=i+1) begin
             MOSI = addr[19-i];

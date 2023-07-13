@@ -38,8 +38,8 @@ module synaptic_core #(
     input  wire           CTRL_SYNARRAY_WE,
     input  wire [   12:0] CTRL_SYNARRAY_ADDR,
     input  wire           CTRL_SYNARRAY_CS,
-    input  wire [2*M-1:0] CTRL_PROG_DATA,
-    input  wire [2*M-1:0] CTRL_SPI_ADDR,
+    input  wire [2*M-1:0] CTRL_PROG_DATA, // 15:0
+    input  wire [2*M-1:0] CTRL_SPI_ADDR, // 15:0
     
     // Outputs ------------------------------------------------
     output wire [   31:0] SYNARRAY_RDATA
