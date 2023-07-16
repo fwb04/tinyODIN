@@ -214,6 +214,8 @@ module tbench (
                     addr_temp[7:0]  = i;    // Each single neuron 
                     // 0101, (000000, byte_addr[1:0]), word_addr[7:0] 
                     // wirte a byte every time 
+                    // Neuron Mem Potential = 10110101010 = 5aa = 1450
+                    // leak = 1010101 = 85
                     spi_send (.addr({1'b0,1'b1,2'b01,addr_temp[15:0]}), .data({4'b0,8'h00,neur_data[7:0]}), .MISO(MISO), .MOSI(MOSI), .SCK(SCK)); 
                 end
                 if(!(i%10))
@@ -303,6 +305,7 @@ module tbench (
         
             // Initializing all neurons to zero
             $display("----- Disabling neurons 0 to 255.");   
+            // 神经元最高位写入1, disable neuron firing
             for (i=0; i<`N; i=i+1) begin
                 addr_temp[15:8] = 3;   // Programming only last byte for disabling a neuron
                 addr_temp[7:0]  = i;   // Doing so for all neurons
@@ -327,7 +330,7 @@ module tbench (
 	            // Programming neurons
 	            for (i=0; i<16; i=i+1) begin
 	                shift_amt      = 32'b0;
-	                
+	                // mem=2046=7fe
 	                case (target_neurons[i]) 
 	                    0 : begin
 	                        param_leak_str  = (!phase) ?           7'd0     :           7'd10;
@@ -422,18 +425,23 @@ module tbench (
 	                    spi_send (.addr({1'b0,1'b1,2'b01,addr_temp[15:0]}), .data({4'b0,8'h00,neur_data[7:0]}), .MISO(MISO), .MOSI(MOSI), .SCK(SCK));
 	                    shift_amt       = shift_amt + 32'd8;
 	                end          
-                    // ???
+                    // write to synapse 坐标[input_neuron, targrt_neuron], 一次写两个突触, 不看target最后一bit
+                    // 0,0:[0,0]&[0,1]=0  1,0:[1,0]&[1,1]=1 2,0:[2,0]&[2,1]=2...
+                    // 0,1:[0,0]&[0,1]=0  1,1:[1,0]&[1,1]=1 ...
+                    // 0,3:[0,2]&[0,3]  1,3:[1,2]&[1,3] ...
+                    // ...
 			        for (j=0; j<16; j=j+1) begin
 			            addr_temp[ 12:5] = input_neurons[j][7:0];
 			            addr_temp[  4:0] = target_neurons[i][7:3];
 			            addr_temp[14:13] = target_neurons[i][2:1];
+                        // addr_temp[15] not used
 			            spi_send (.addr({1'b0,1'b1,2'b10,addr_temp[15:0]}), .data({4'b0,8'h00,{input_neurons[j][3:0],input_neurons[j][3:0]}}), .MISO(MISO), .MOSI(MOSI), .SCK(SCK));    // Synapse value = pre-synaptic neuron index 4 LSBs
 			        end
 
                 end 
                 // programming neurons END
 
-                //AERIN_ACK_c = AERIN_ACK;
+                // DO_OPEN_LOOP = 1
                 if (`DO_OPEN_LOOP) begin
 
     	            //Re-enable network operation (SPI_OPEN_LOOP stays at 1)
@@ -441,24 +449,37 @@ module tbench (
     	            
     	            $display("----- Starting stimulation pattern.");
 
-                    for (n=0; n<256; n++)
+                    // 获取膜电位
+                    for (n=0; n<256; n++) begin
                         vcore[n] = $signed(snn_0.neuron_core_0.neurarray_0.SRAM[n][11:0]);
+                        
+                    end
+                    $display("Membrane Potential of Neuron 0 is %d.", vcore[0]);
 
+                    // phase=0, phase=1
                     if (!phase) begin
 
                     	for (j=0; j<2050; j=j+1) begin
+                            // fork
+                            //     #20000 $finish(1);
+                            // join_none
+                            // $display("------------------time is ", $time);
                     		aer_send (.addr_in({1'b0,1'b1,8'hFF}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Time reference event (global)
                             wait_ns(2000);
-
+                            
                             for (n=0; n<256; n++)
                                 vcore[n] = $signed(snn_0.neuron_core_0.neurarray_0.SRAM[n][11:0]);
+                            $display("Membrane Potential of Neuron 1 at time %dus is %d.", j*2, vcore[1]);
                         end
+
 
                     	wait_ns(10000);
 
                         /*
                          * Here, all neurons but number 0 should be at a membrane potential of 0
                          */
+                        for (n=0; n<256; n++)
+                            $display("Membrane Potential of Neuron %d is %d.", n, vcore[n]);
                         for (j=0; j<16; j=j+1)
                             assert ($signed(vcore[target_neurons[j]]) == (((target_neurons[j] > 0) && (target_neurons[j] < `SPI_MAX_NEUR)) ? $signed(12'd0) : $signed(12'd2046))) else $fatal(0, "Issue in open-loop experiments: membrane potential of neuron %d not correct after leakage",target_neurons[j]);
 
