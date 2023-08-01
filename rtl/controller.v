@@ -194,6 +194,7 @@ module controller #(
 							else			          nextstate = W_SYN;
 			R_SYN    	:                             nextstate = WAIT_SPIDN;
 			TREF    	:   if (~&AERIN_ADDR[M-1:0] ? (ctrl_cnt == 32'd1) : ((neur_cnt == SPI_MAX_NEUR) && neur_cnt_inc))
+                            // 判断是单神经元泄露(有必要？)还是全部神经元泄露
                                                       nextstate = WAIT_REQDN;
 							else					  nextstate = TREF;
             PUSH        :                             nextstate = WAIT_REQDN; 
@@ -356,8 +357,8 @@ module controller #(
             AERIN_ACK           = 1'b0;
             neur_cnt_inc        = 1'b0;
             
-            // virtual event: w[3:0] + 4'b0000 + neur[3:0]
-            // non virtual  : 4'b0000 + neur[7:0]
+            // virtual event: w[3:0]  +  4'b0000 + neur[3:0]
+            // non virtual  : 4'b0000 +     neur[7:0]
             CTRL_SCHED_VIRTS    = AERIN_ADDR[M+1] ?        AERIN_ADDR[M-1:4]  :              4'b0;
             CTRL_SCHED_ADDR     = AERIN_ADDR[M+1] ? {4'h0, AERIN_ADDR[  3:0]} : AERIN_ADDR[M-1:0];
             CTRL_SCHED_EVENT_IN = 1'b1; // push 12'{CTRL_SCHED_VIRTS,CTRL_SCHED_ADDR} into fifo

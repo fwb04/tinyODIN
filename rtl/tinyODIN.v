@@ -104,14 +104,15 @@ module tinyODIN #(
     
     
     //----------------------------------------------------------------------------------
-	//	Reset (with double sync barrier)
+	//	Reset (with double sync barrier)  上升沿复位
+    //  异步复位 同步化 (异步复位信号打两拍同步)
 	//----------------------------------------------------------------------------------
     // 
     always @(posedge CLK) begin
         RST_sync_int <= RST;
 		RST_sync     <= RST_sync_int;
 	end
-    // sync neg reset
+    // sync neg reset 下降沿复位
     assign RSTN_sync = ~RST_sync;
 
 

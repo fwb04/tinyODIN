@@ -86,6 +86,7 @@ module spi_slave #(
 		else if (spi_cnt == 6'd19) spi_addr <= spi_shift_reg_in[19:0];
         else                       spi_addr <= spi_addr;
 	
+    // 高位先输入
     always @(posedge SCK)
         spi_shift_reg_in <= {spi_shift_reg_in[18:0], MOSI};
         
@@ -100,6 +101,7 @@ module spi_slave #(
             CTRL_OP_CODE        <= 2'b0;
             CTRL_PROG_DATA      <= {(2*M){1'b0}};
 		end else if (spi_shift_reg_in[19] && (spi_cnt == 6'd19)) begin
+            // 读信号产生
             spi_shift_reg_out   <= {spi_shift_reg_out[18:0], 1'b0};
             CTRL_READBACK_EVENT <= (spi_shift_reg_in[2*M+1:2*M] != 2'b0);
             CTRL_PROG_EVENT     <= 1'b0;
@@ -107,6 +109,7 @@ module spi_slave #(
             CTRL_OP_CODE        <= spi_shift_reg_in[2*M+1:2*M];
             CTRL_PROG_DATA      <= {(2*M){1'b0}};
 		end else if (spi_shift_reg_in[18] && (spi_cnt == 6'd19)) begin
+            // 写信号产生
             spi_shift_reg_out   <= 20'b0;
             CTRL_READBACK_EVENT <= 1'b0;
             CTRL_PROG_EVENT     <= 1'b0;
@@ -114,6 +117,7 @@ module spi_slave #(
             CTRL_OP_CODE        <= spi_shift_reg_in[2*M+1:2*M];
             CTRL_PROG_DATA      <= {(2*M){1'b0}};
 		end else if (spi_addr[19] && (spi_cnt == 6'd31)) begin
+            // master收集读数据，读一个字节（占据MISO的最后8bit），其他bit都是0
             spi_shift_reg_out   <= (CTRL_OP_CODE == 2'b10) ? {readback_weight[7:0],12'b0} : ((CTRL_OP_CODE == 2'b01) ? {readback_neuron[7:0],12'b0} : {spi_shift_reg_out[18:0], 1'b0}); 
             CTRL_READBACK_EVENT <= 1'b0;
             CTRL_PROG_EVENT     <= 1'b0;
@@ -121,6 +125,7 @@ module spi_slave #(
             CTRL_OP_CODE        <= CTRL_OP_CODE;
             CTRL_PROG_DATA      <= {(2*M){1'b0}};
 		end else if (spi_addr[18] && (spi_cnt == 6'd39)) begin // write to neuron or synapse memory
+            // slav收集写数据，写数据：4'bNA + 16'b数据
             spi_shift_reg_out   <= {spi_shift_reg_out[18:0], 1'b0};
             CTRL_READBACK_EVENT <= 1'b0;
             CTRL_PROG_EVENT     <= (CTRL_OP_CODE != 2'b0); // write to neuron or synapse memory
@@ -140,6 +145,7 @@ module spi_slave #(
     assign readback_neuron =     NEUR_STATE >> (({3'b0,CTRL_SPI_ADDR[2*M-1:  M  ]} << 3));
     
 	// SPI MISO
+    // 高位先输出
 	assign MISO = spi_shift_reg_out[19];
 
     

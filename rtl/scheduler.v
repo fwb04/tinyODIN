@@ -93,7 +93,7 @@ module scheduler #(
         .data_out(data_out_main)
     );
 
-    // SPI_OPEN_LOOP_sync = 0 and NEUR_EVENT_OUT = 1 ->
+    // SPI_OPEN_LOOP_sync = 0 and NEUR_EVENT_OUT = 1 ->  push (4'b0 + 8b neuron addr) into FIFO
     // or CTRL_SCHED_EVENT_IN = 1                    ->  push (4b synapse + 8b neuron addr) event into FIFO
     assign push_req_n = ~((~SPI_OPEN_LOOP_sync & NEUR_EVENT_OUT) | CTRL_SCHED_EVENT_IN);
 
