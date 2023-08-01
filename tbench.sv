@@ -294,8 +294,6 @@ module tbench (
         /*****************************************************************************************************************************************************************************************************************
                                                                                                      SYSTEM-LEVEL CHECKING
         *****************************************************************************************************************************************************************************************************************/
-        // AEROUT_ADDR_c = AEROUT_ADDR;
-        // AEROUT_REQ_c = AEROUT_REQ;
         if (`DO_FULL_CHECK) begin
         
             fork
@@ -499,12 +497,17 @@ module tbench (
 
                 		/*
                 		 * Here, neurons that did not fire (all except 0,1,3,13,27) should be at mem pot -80
+                         * 0/1/3/13/27 中最大的阈值是200       38的阈值是300
+                         * 0-7这8个脉冲会让膜电位达到28*10=280
+                         * 0-14 255 所有的脉冲会让膜电位达到-8*10=-80
+                         * 此过程中TREF未起作用
+                         * 输入神经元>200是起作用的，输出神经元>200不会发射脉冲
                 		 */
                         for (j=0; j<16; j=j+1)
                             if ((target_neurons[j] > 27) && (target_neurons[j] < `SPI_MAX_NEUR))
                                 assert ($signed(vcore[target_neurons[j]]) == $signed(-12'd80)) else $fatal(0, "Issue in open-loop experiments: membrane potential of neuron %d not correct after stimulation",target_neurons[j]);
 
-
+                        // TREF
                         for (j=0; j<100; j=j+1) begin
                             aer_send (.addr_in({1'b0,1'b1,8'hFF}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Time reference event (global)
                             wait_ns(2000);
@@ -533,7 +536,8 @@ module tbench (
 
                             //Thread 2
                              /*
-                             * Here, neuron 194 (with the highest membrane potential among enabled neurons) should fire. Neuron 248, 250 or 255 should be disabled.
+                             * Here, neuron 194 (with the highest membrane potential among enabled neurons) should fire. Neuron 248, 250 or 255 should be disabled.            
+                             * neuron194 阈值电压最大
                              */
                             while (aer_neur_spk != 8'd194) begin
                                 assert ((aer_neur_spk != 8'd248) && (aer_neur_spk != 8'd250) && (aer_neur_spk != 8'd255)) else $fatal(0, "Issue in open-loop experiments: neurons 248, 250 or 255 should be disabled.");
@@ -562,11 +566,14 @@ module tbench (
                         //Start monitoring output spikes in the console
                         auto_ack_verbose = 1'b1;
 
+                        // state tran: 0 6 b 0 8 0
                         aer_send (.addr_in({1'b1,1'b0,{4'h5,4'd3}}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Virtual value-5 event to neuron 3
                         aer_send (.addr_in({1'b1,1'b0,{4'h5,4'd3}}), .addr_out(AERIN_ADDR), .ack(AERIN_ACK_c), .req(AERIN_REQ)); //Virtual value-5 event to neuron 3
                         /*
                          * Here, the correct output firing sequence is 3,0,1,0.
+                         * Neuron3的阈值是10  5+5=10会发射脉冲
                          */
+                        $display("717------------------time is ", $time);
                         while (!AEROUT_REQ) wait_ns(1);
                         assert (AEROUT_ADDR == 8'd3) else $fatal(0, "Issue in closed-loop experiments: first spike of the output sequence is not correct, received %d", AEROUT_ADDR);
                         while ( AEROUT_REQ) wait_ns(1);
@@ -743,6 +750,8 @@ module tbench (
         // MISO_c = MISO;
         
         for (i=0; i<20; i=i+1) begin
+            // MOSI = addr[19];
+            // addr = {addr[18:0], 1'b0};
             MOSI = addr[19-i];
             wait_ns(`SCK_HALF_PERIOD);
             SCK  = 1'b1;
